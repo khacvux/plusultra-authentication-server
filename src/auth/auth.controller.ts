@@ -2,7 +2,8 @@ import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
 import { GetUser } from './decorator';
-import { AuthDto } from './dto/create-auth.dto';
+import { AuthDto } from './dto/auth.dto';
+import { IsTokenDto } from './dto/is-token.dto';
 
 @Controller()
 export class AuthController {
@@ -10,12 +11,16 @@ export class AuthController {
 
   @EventPattern('create_user')
   createUser(dto: AuthDto) {
-    console.log('called');
     return this.authService.createUser(dto);
   }
 
   @MessagePattern('signin')
-  signin(@Payload() dto: any, @GetUser() email: AuthDto) {
+  signin(@Payload() dto: AuthDto, @GetUser() email: AuthDto) {
     return this.authService.signin(dto);
+  }
+
+  @MessagePattern('jwt_passport')
+  jwtPassport(@Payload() dto: IsTokenDto) {
+    return this.authService.jwtVerify(dto);
   }
 }
