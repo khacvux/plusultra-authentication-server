@@ -1,16 +1,11 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  OnApplicationBootstrap,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthDto } from './dto/auth.dto';
 import * as argon from 'argon2';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
-import { IsTokenDto } from './dto/is-token.dto';
+import { IsTokenDto, IsUserIdDto } from './dto';
 
 @Injectable()
 export class AuthService {
@@ -31,6 +26,7 @@ export class AuthService {
           hash,
         },
       });
+      Logger.log(`- ACCOUNT CREATED: ${dto.email}`);
       return {
         access_token: this.signToken(user.id, user.email),
       };
@@ -55,9 +51,20 @@ export class AuthService {
     const pwMatches = argon.verify(user.hash, dto.password);
     if (!pwMatches) throw new ForbiddenException('Credientials incorrect');
 
+    Logger.log(`ACCOUNT ""${dto.email}"" SIGNED IN.`);
     return {
       access_token: await this.signToken(user.id, user.email),
     };
+  }
+
+  async getUserById(payload: IsUserIdDto) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: payload.userId,
+      },
+    });
+    delete user.hash;
+    return user;
   }
 
   async signToken(userId: number, email: string): Promise<string> {
@@ -73,8 +80,10 @@ export class AuthService {
     return token;
   }
 
-  jwtVerify(dto: IsTokenDto) {
-    return this.jwt.verify(dto.token, { secret: this.config.get('JWT_SECRET') })
+  jwtVerify(payload: IsTokenDto): boolean {
+    return this.jwt.verify(payload.token, {
+      secret: this.config.get('JWT_SECRET'),
+    })
       ? true
       : false;
   }

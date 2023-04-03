@@ -12,6 +12,7 @@ async function bootstrap() {
   );
   app.enableCors({
     origin: process.env.GATEWAY_HOST,
+    credentials: true,
   });
   app.connectMicroservice({
     transport: Transport.TCP,

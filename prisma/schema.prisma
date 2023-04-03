@@ -11,15 +11,269 @@ datasource db {
 }
 
 model User {
-  id       Int      @id @default(autoincrement())
-  createAt DateTime @default(now())
-  updateAt DateTime @updatedAt
-
-  email String @unique
-  hash  String
-
-  firstName String?
+  id         Int     @id @default(autoincrement())
+  hash       String
+  firstName  String?
   lastName   String?
+  email      String  @unique
+  telephone  String?
+  avatar     String?
+  userShopId Int?    @unique
 
-  @@map("users")
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  userAddress     UserAddress[]    @relation("user_address_fk")
+  userPayment     UserPayment[]    @relation("user_payment_fk")
+  shoppingSession ShoppingSession? @relation("shopping_session_fk")
+  orderDetail     OrderDetail?     @relation("order_detail_fk")
+  userShop        UserShop?        @relation("user_to_user_shop_fk")
+  post            Post[]           @relation("user_post_fk")
+
+  @@map("user")
+}
+
+model UserAddress {
+  id         Int    @id @default(autoincrement())
+  userId     Int    @unique
+  address    String
+  city       String
+  postalCode String
+  country    String
+  telephone  String
+
+  user User @relation("user_address_fk", fields: [userId], references: [id])
+
+  @@map("user_address")
+}
+
+model UserPayment {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  payment_type String
+  provider     String
+  expiry       DateTime
+
+  user User @relation("user_payment_fk", fields: [userId], references: [id])
+
+  @@map("user_payment")
+}
+
+model ShoppingSession {
+  id     Int     @id @default(autoincrement())
+  userId Int     @unique
+  total  Decimal @db.Money
+
+  user     User       @relation("shopping_session_fk", fields: [userId], references: [id])
+  cartItem CartItem[] @relation("cart_item_fk")
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+}
+
+model CartItem {
+  id        Int @id @default(autoincrement())
+  sessionId Int @unique
+  productId Int @unique
+  quantity  Int
+
+  shoppingSession ShoppingSession @relation("cart_item_fk", fields: [sessionId], references: [id])
+  product         Product?        @relation("product_fk", fields: [productId], references: [id])
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  @@map("cart_item")
+}
+
+model Product {
+  id          Int     @id @default(autoincrement())
+  sellerId    Int
+  name        String
+  desc        String
+  price       Decimal @db.Money
+  categoryId  Int     @unique
+  inventoryId Int     @unique
+  discountId  Int     @unique
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+  deletedAt  DateTime @updatedAt
+
+  cartItem         CartItem?         @relation("product_fk")
+  productCategory  ProductCategory[] @relation("product_category_fk")
+  productInventory ProductInventory? @relation("product_inventory_fk")
+  productDiscount  ProductDiscount[] @relation("product_discount_fk")
+  orderItem        OrderItem?        @relation("order_item_fk")
+  userShop         UserShop          @relation("user_shop_fk", fields: [id], references: [productId])
+
+  @@map("product")
+}
+
+model ProductCategory {
+  id   Int     @id @default(autoincrement())
+  name String
+  desc String?
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+  deletedAt  DateTime @updatedAt
+
+  product Product @relation("product_category_fk", fields: [id], references: [categoryId])
+
+  @@map("product_category")
+}
+
+model ProductInventory {
+  id       Int @id @default(autoincrement())
+  quantity Int
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+  deletedAt  DateTime @updatedAt
+
+  product Product @relation("product_inventory_fk", fields: [id], references: [inventoryId])
+
+  @@map("product_inventory")
+}
+
+model ProductDiscount {
+  id           Int     @id @default(autoincrement())
+  name         String
+  desc         String
+  desc_percent String
+  active       Boolean
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  product Product @relation("product_discount_fk", fields: [id], references: [discountId])
+
+  @@map("product_discount")
+}
+
+model OrderItem {
+  id        Int @id @default(autoincrement())
+  order_id  Int @unique
+  productId Int @unique
+  quantity  Int
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  order_detail Int
+
+  product     Product?      @relation("order_item_fk", fields: [productId], references: [id])
+  orderDetail OrderDetail[] @relation("order_detail_fk")
+
+  @@map("order_item")
+}
+
+model OrderDetail {
+  id        Int     @id @default(autoincrement())
+  userId    Int     @unique
+  total     Decimal @db.Money
+  paymentId Int     @unique
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  orderItem     OrderItem       @relation("order_detail_fk", fields: [id], references: [order_id])
+  paymentDetail PaymentDetail[] @relation("payment_detail_fk")
+  user          User            @relation("order_detail_fk", fields: [userId], references: [id])
+
+  @@map("order_detail")
+}
+
+model PaymentDetail {
+  id       Int    @id @default(autoincrement())
+  orderId  Int
+  amount   Int
+  provider String
+  status   String
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  orderDetail OrderDetail @relation("payment_detail_fk", fields: [id], references: [paymentId])
+
+  @@map("payment_detail")
+}
+
+model UserShop {
+  id        Int @id() @default(autoincrement())
+  productId Int @unique
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  product Product[] @relation("user_shop_fk")
+  user    User      @relation("user_to_user_shop_fk", fields: [id], references: [userShopId])
+
+  @@map("user_shop")
+}
+
+model Post {
+  id         Int     @id @default(autoincrement())
+  caption    String?
+  mediaId    Int?    @unique
+  commentId  Int?    @unique
+  sharedId   Int?    @unique
+  likedId    Int?    @unique
+  authorId   Int
+  productsId Int?
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+  deletedAt  DateTime
+
+  user    User          @relation("user_post_fk", fields: [authorId], references: [id])
+  media   PostMedia[]   @relation("media_post")
+  comment PostComment[] @relation("comment_post")
+  shared  PostShared[]  @relation("shared_post")
+
+  @@map("post")
+}
+
+model PostMedia {
+  id         Int      @id @default(autoincrement())
+  mediaUrl   String
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  post Post @relation("media_post", fields: [id], references: [mediaId])
+
+  @@map("post_media")
+}
+
+model PostComment {
+  id         Int      @id @default(autoincrement())
+  comment    String
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  post Post @relation("comment_post", fields: [id], references: [commentId])
+
+  @@map("post_comment")
+}
+
+model PostShared {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  post Post @relation("shared_post", fields: [id], references: [sharedId])
+
+  @@map("post_shared")
+}
+
+model PostWithProducts {
+  id         Int      @id @default(autoincrement())
+  productId  String
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+
+  @@map("post_with_products")
 }
