@@ -3,7 +3,7 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
 import { GetUser } from './decorator';
 import { AuthDto } from './dto/auth.dto';
-import { IsTokenDto, IsUserIdDto } from './dto';
+import { IsTokenDto, IsUserIdDto, OwnerCheckDto } from './dto';
 
 @Controller()
 export class AuthController {
@@ -22,6 +22,11 @@ export class AuthController {
   @MessagePattern('jwt_passport')
   jwtPassport(@Payload() dto: IsTokenDto) {
     return this.authService.jwtVerify(dto);
+  }
+
+  @MessagePattern('owner_check')
+  ownerCheck(@Payload() dto: OwnerCheckDto) {
+    return this.authService.OwnerCheck(dto)
   }
 
   @MessagePattern('get_me')

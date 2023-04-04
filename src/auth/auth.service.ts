@@ -5,7 +5,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthDto } from './dto/auth.dto';
 import * as argon from 'argon2';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
-import { IsTokenDto, IsUserIdDto } from './dto';
+import { IsTokenDto, IsUserIdDto, OwnerCheckDto } from './dto';
 
 @Injectable()
 export class AuthService {
@@ -86,5 +86,17 @@ export class AuthService {
     })
       ? true
       : false;
+  }
+
+  async OwnerCheck(payload: OwnerCheckDto): Promise<boolean> {
+    const result = await this.prisma.post.findUnique({
+      where: {
+        id: payload.postId,
+      },
+      select: {
+        authorId: true,
+      },
+    });
+    return result.authorId == payload.authorId;
   }
 }
