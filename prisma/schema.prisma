@@ -11,14 +11,15 @@ datasource db {
 }
 
 model User {
-  id         Int     @id @default(autoincrement())
-  hash       String
-  firstName  String?
-  lastName   String?
-  email      String  @unique
-  telephone  String?
-  avatar     String?
-  userShopId Int?    @unique
+  id          Int     @id @default(autoincrement())
+  hash        String
+  firstName   String?
+  lastName    String?
+  email       String  @unique
+  telephone   String?
+  avatar      String?
+  userShopId  Int?    @unique
+  accessToken String?  @unique
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
@@ -29,6 +30,7 @@ model User {
   orderDetail     OrderDetail?     @relation("order_detail_fk")
   userShop        UserShop?        @relation("user_to_user_shop_fk")
   post            Post[]           @relation("user_post_fk")
+  PostComment     PostComment[]    @relation("user_comment")
 
   @@map("user")
 }
@@ -214,66 +216,81 @@ model UserShop {
 }
 
 model Post {
-  id         Int     @id @default(autoincrement())
-  caption    String?
-  mediaId    Int?    @unique
-  commentId  Int?    @unique
-  sharedId   Int?    @unique
-  likedId    Int?    @unique
-  authorId   Int
-  productsId Int?
+  id       Int     @id @default(autoincrement())
+  caption  String?
+  authorId Int
+  // productsId Int?
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
-  deletedAt  DateTime
 
   user    User          @relation("user_post_fk", fields: [authorId], references: [id])
   media   PostMedia[]   @relation("media_post")
   comment PostComment[] @relation("comment_post")
-  shared  PostShared[]  @relation("shared_post")
+  shared  PostShare[]   @relation("shared_post")
+  likes   PostLike[]    @relation("like_post")
 
   @@map("post")
 }
 
-model PostMedia {
-  id         Int      @id @default(autoincrement())
-  mediaUrl   String
+model PostLike {
+  id     Int     @id @default(autoincrement())
+  postId Int
+  userId Int
+  status Boolean
+
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  post Post @relation("media_post", fields: [id], references: [mediaId])
+  post Post @relation("like_post", fields: [postId], references: [id])
+}
+
+model PostMedia {
+  mediaKey String @id
+  postId   Int
+  mediaUrl String
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  post Post @relation("media_post", fields: [postId], references: [id])
 
   @@map("post_media")
 }
 
 model PostComment {
-  id         Int      @id @default(autoincrement())
-  comment    String
+  id       Int    @id @default(autoincrement())
+  postId   Int
+  authorId Int
+  comment  String
+
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  post Post @relation("comment_post", fields: [id], references: [commentId])
+  post Post @relation("comment_post", fields: [postId], references: [id])
+  user User @relation("user_comment", fields: [authorId], references: [id])
 
   @@map("post_comment")
 }
 
-model PostShared {
+model PostShare {
   id         Int      @id @default(autoincrement())
+  postId     Int
   userId     String
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  post Post @relation("shared_post", fields: [id], references: [sharedId])
+  post Post @relation("shared_post", fields: [postId], references: [id])
 
   @@map("post_shared")
 }
 
 model PostWithProducts {
   id         Int      @id @default(autoincrement())
+  postId     Int
   productId  String
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
-
 
   @@map("post_with_products")
 }

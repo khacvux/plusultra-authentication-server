@@ -2,9 +2,23 @@ version: '3.8'
 services:
   dev-db:
     image: postgres:latest
-    ports: 
+    ports:
       - 5432:5432
     environment:
       POSTGRES_USER: vukhac
       POSTGRES_PASSWORD: 123
       POSTGRES_DB: plus-ultra
+  cache:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - 6379:6379
+    command: redis-server --save 20 1 --loglevel warning --requirepass 123
+    volumes:
+      - ./redis/data:/data
+
+volumes:
+  dev-db:
+    driver: local
+  cache:
+    driver: local

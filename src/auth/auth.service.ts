@@ -1,11 +1,21 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { AuthDto } from './dto/auth.dto';
 import * as argon from 'argon2';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
-import { IsTokenDto, IsUserIdDto, OwnerCheckDto } from './dto';
+import {
+  AuthDto,
+  IsTokenDto,
+  IsUserIdDto,
+  OwnerCheckDto,
+  RefreshTokenDto,
+} from './dto';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { IORedisKey } from '../redis/redis.module';
+import { Redis } from 'ioredis';
+import { ServerErrorException } from './exceptions';
+
+const EXPIRESIN: number = 7 * 24 * 60 * 60;
 
 @Injectable()
 export class AuthService {
@@ -13,6 +23,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    @Inject(IORedisKey) private readonly redisClient: Redis,
   ) {}
 
   async createUser(dto: AuthDto) {
@@ -28,7 +39,7 @@ export class AuthService {
       });
       Logger.log(`- ACCOUNT CREATED: ${dto.email}`);
       return {
-        access_token: this.signToken(user.id, user.email),
+        access_token: this._signAccessToken(user.id),
       };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
@@ -51,10 +62,65 @@ export class AuthService {
     const pwMatches = argon.verify(user.hash, dto.password);
     if (!pwMatches) throw new ForbiddenException('Credientials incorrect');
 
-    Logger.log(`ACCOUNT ""${dto.email}"" SIGNED IN.`);
-    return {
-      access_token: await this.signToken(user.id, user.email),
-    };
+    const [access_token, refresh_token] = await Promise.all([
+      this._signAccessToken(user.id),
+      this._signRefreshToken(user.id),
+    ]);
+    try {
+      await Promise.all([
+        this.redisClient.set(
+          `uid:${user.id.toString()}`,
+          refresh_token,
+          'EX',
+          EXPIRESIN,
+        ),
+        this.prisma.user.update({
+          where: {
+            id: user.id,
+          },
+          data: {
+            accessToken: access_token,
+          },
+        }),
+      ]);
+      Logger.log(`ACCOUNT "${user.id}" SIGNED IN.`);
+      Logger.log(`- SET key 'uid:${user.id}' to REDIS`);
+      return {
+        access_token,
+        refresh_token,
+      };
+    } catch {
+      throw new ServerErrorException();
+    }
+  }
+
+  async refreshToken(dto: RefreshTokenDto) {
+    Logger.log(`runn`);
+
+    const existedToken = await this.redisClient.get(`uid:${dto.userId}`);
+    if (!existedToken) throw new ServerErrorException();
+    const tokenMatches = dto.refreshToken.localeCompare(existedToken);
+    if (tokenMatches) throw new ForbiddenException('Credientials incorrect');
+    try {
+      const [access_token, refresh_token] = await Promise.all([
+        this._signAccessToken(dto.userId),
+        this._signRefreshToken(dto.userId),
+      ]);
+      Logger.log(`ACCOUNT "${dto.userId}" SIGNED IN.`);
+      await this.redisClient.set(
+        `uid:${dto.userId.toString()}`,
+        refresh_token,
+        'EX',
+        EXPIRESIN,
+      );
+      Logger.log(`- SET key 'uid:${dto.userId}' to REDIS`);
+      return {
+        access_token,
+        refresh_token,
+      };
+    } catch {
+      throw new ServerErrorException();
+    }
   }
 
   async getUserById(payload: IsUserIdDto) {
@@ -67,25 +133,36 @@ export class AuthService {
     return user;
   }
 
-  async signToken(userId: number, email: string): Promise<string> {
+  async _signAccessToken(userId: number): Promise<string> {
     const payload = {
       sub: userId,
-      email,
     };
-    const secret = this.config.get('JWT_SECRET');
     const token = await this.jwt.signAsync(payload, {
-      expiresIn: '7d',
-      secret,
+      expiresIn: this.config.get('EXPIRESIN'),
+      secret: this.config.get('JWT_SECRET'),
     });
     return token;
   }
 
+  async _signRefreshToken(userId: number): Promise<string> {
+    const payload = {
+      sub: userId,
+    };
+    const refresh_token = await this.jwt.signAsync(payload, {
+      expiresIn: this.config.get('EXPIRESIN_REFRESH'),
+      secret: this.config.get('JWT_SECRET_REFRESH'),
+    });
+    return refresh_token;
+  }
+
   jwtVerify(payload: IsTokenDto): boolean {
-    return this.jwt.verify(payload.token, {
-      secret: this.config.get('JWT_SECRET'),
-    })
-      ? true
-      : false;
+    return Boolean(
+      this.jwt.verify(payload.token, {
+        secret: this.config.get('JWT_SECRET'),
+      }),
+    );
+    // ? true
+    // : false;
   }
 
   async OwnerCheck(payload: OwnerCheckDto): Promise<boolean> {

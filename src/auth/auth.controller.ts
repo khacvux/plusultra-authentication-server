@@ -2,8 +2,13 @@ import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
 import { GetUser } from './decorator';
-import { AuthDto } from './dto/auth.dto';
-import { IsTokenDto, IsUserIdDto, OwnerCheckDto } from './dto';
+import {
+  IsTokenDto,
+  IsUserIdDto,
+  OwnerCheckDto,
+  AuthDto,
+  RefreshTokenDto,
+} from './dto';
 
 @Controller()
 export class AuthController {
@@ -19,6 +24,11 @@ export class AuthController {
     return this.authService.signin(dto);
   }
 
+  @MessagePattern('refresh-token')
+  refresh(@Payload() dto: RefreshTokenDto) {
+    return this.authService.refreshToken(dto);
+  }
+
   @MessagePattern('jwt_passport')
   jwtPassport(@Payload() dto: IsTokenDto) {
     return this.authService.jwtVerify(dto);
@@ -26,7 +36,7 @@ export class AuthController {
 
   @MessagePattern('owner_check')
   ownerCheck(@Payload() dto: OwnerCheckDto) {
-    return this.authService.OwnerCheck(dto)
+    return this.authService.OwnerCheck(dto);
   }
 
   @MessagePattern('get_me')
