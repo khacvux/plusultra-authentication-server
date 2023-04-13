@@ -8,6 +8,7 @@ import {
   OwnerCheckDto,
   AuthDto,
   RefreshTokenDto,
+  SignOutDto,
 } from './dto';
 
 @Controller()
@@ -24,9 +25,14 @@ export class AuthController {
     return this.authService.signin(dto);
   }
 
-  @MessagePattern('refresh-token')
+  @MessagePattern('refresh_token')
   refresh(@Payload() dto: RefreshTokenDto) {
-    return this.authService.refreshToken(dto);
+    return this.authService.refresh(dto);
+  }
+
+  @MessagePattern('sign_out')
+  signout(@Payload() dto: SignOutDto) {
+    return this.authService.signout(dto);
   }
 
   @MessagePattern('jwt_passport')

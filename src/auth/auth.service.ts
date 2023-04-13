@@ -9,6 +9,7 @@ import {
   IsUserIdDto,
   OwnerCheckDto,
   RefreshTokenDto,
+  SignOutDto,
 } from './dto';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { IORedisKey } from '../redis/redis.module';
@@ -37,9 +38,18 @@ export class AuthService {
           hash,
         },
       });
+      const [access_token, refresh_token] = await Promise.all([
+        this._signAccessToken(user.id),
+        this._signRefreshToken(user.id),
+      ]);
+      await Promise.all([
+        this._setAccessTokenToRedis(user.id.toString(), access_token),
+        this._setRefreshTokenToRedis(user.id.toString(), refresh_token),
+      ]);
       Logger.log(`- ACCOUNT CREATED: ${dto.email}`);
       return {
-        access_token: this._signAccessToken(user.id),
+        access_token,
+        refresh_token,
       };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
@@ -68,23 +78,10 @@ export class AuthService {
     ]);
     try {
       await Promise.all([
-        this.redisClient.set(
-          `uid:${user.id.toString()}`,
-          refresh_token,
-          'EX',
-          EXPIRESIN,
-        ),
-        this.prisma.user.update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            accessToken: access_token,
-          },
-        }),
+        this._setAccessTokenToRedis(user.id.toString(), access_token),
+        this._setRefreshTokenToRedis(user.id.toString(), refresh_token),
       ]);
       Logger.log(`ACCOUNT "${user.id}" SIGNED IN.`);
-      Logger.log(`- SET key 'uid:${user.id}' to REDIS`);
       return {
         access_token,
         refresh_token,
@@ -94,10 +91,10 @@ export class AuthService {
     }
   }
 
-  async refreshToken(dto: RefreshTokenDto) {
-    Logger.log(`runn`);
-
-    const existedToken = await this.redisClient.get(`uid:${dto.userId}`);
+  async refresh(dto: RefreshTokenDto) {
+    const existedToken = await this._getRefreshTokenToRedis(
+      dto.userId.toString(),
+    );
     if (!existedToken) throw new ServerErrorException();
     const tokenMatches = dto.refreshToken.localeCompare(existedToken);
     if (tokenMatches) throw new ForbiddenException('Credientials incorrect');
@@ -107,16 +104,34 @@ export class AuthService {
         this._signRefreshToken(dto.userId),
       ]);
       Logger.log(`ACCOUNT "${dto.userId}" SIGNED IN.`);
-      await this.redisClient.set(
-        `uid:${dto.userId.toString()}`,
-        refresh_token,
-        'EX',
-        EXPIRESIN,
-      );
-      Logger.log(`- SET key 'uid:${dto.userId}' to REDIS`);
+      await Promise.all([
+        this._setAccessTokenToRedis(dto.userId.toString(), access_token),
+        this._setRefreshTokenToRedis(dto.userId.toString(), refresh_token),
+      ]);
       return {
         access_token,
         refresh_token,
+      };
+    } catch {
+      throw new ServerErrorException();
+    }
+  }
+
+  async signout(dto: SignOutDto) {
+    try {
+      await Promise.all([
+        // this.prisma.user.update({
+        //   where: {
+        //     id: dto.userId,
+        //   },
+        //   data: {
+        //     accessToken: null,
+        //   },
+        // }),
+        this.redisClient.del(`uid:${dto.userId}`),
+      ]);
+      return {
+        message: 'OK',
       };
     } catch {
       throw new ServerErrorException();
@@ -131,6 +146,31 @@ export class AuthService {
     });
     delete user.hash;
     return user;
+  }
+
+  async jwtVerify(payload: IsTokenDto): Promise<boolean> {
+    const existedToken = await this.redisClient.get(
+      `uida:${this.jwt.decode(payload.token).sub}`,
+    );
+    if (payload.token == existedToken)
+      return Boolean(
+        await this.jwt.verify(payload.token, {
+          secret: this.config.get('JWT_SECRET'),
+        }),
+      );
+    else return false;
+  }
+
+  async OwnerCheck(payload: OwnerCheckDto): Promise<boolean> {
+    const result = await this.prisma.post.findUnique({
+      where: {
+        id: payload.postId,
+      },
+      select: {
+        authorId: true,
+      },
+    });
+    return result.authorId == payload.authorId;
   }
 
   async _signAccessToken(userId: number): Promise<string> {
@@ -155,25 +195,33 @@ export class AuthService {
     return refresh_token;
   }
 
-  jwtVerify(payload: IsTokenDto): boolean {
-    return Boolean(
-      this.jwt.verify(payload.token, {
-        secret: this.config.get('JWT_SECRET'),
-      }),
+  async _setRefreshTokenToRedis(userId: string, refresh_token: string) {
+    Logger.log(`- SET key 'uidr:${userId}' to REDIS`);
+    return await this.redisClient.set(
+      `uidr:${userId}`,
+      refresh_token,
+      'EX',
+      EXPIRESIN,
     );
-    // ? true
-    // : false;
   }
 
-  async OwnerCheck(payload: OwnerCheckDto): Promise<boolean> {
-    const result = await this.prisma.post.findUnique({
-      where: {
-        id: payload.postId,
-      },
-      select: {
-        authorId: true,
-      },
-    });
-    return result.authorId == payload.authorId;
+  async _setAccessTokenToRedis(userId: string, access_token: string) {
+    Logger.log(`- SET key 'uida:${userId}' to REDIS`);
+    return await this.redisClient.set(
+      `uida:${userId}`,
+      access_token,
+      'EX',
+      EXPIRESIN,
+    );
+  }
+
+  async _getRefreshTokenToRedis(userId: string) {
+    Logger.log(`- SET key 'uidr:${userId}' to REDIS`);
+    return this.redisClient.get(`uidr:${userId}`);
+  }
+
+  async _getAccessTokenToRedis(userId: string) {
+    Logger.log(`- SET key 'uida:${userId}' to REDIS`);
+    return this.redisClient.get(`uida:${userId}`);
   }
 }

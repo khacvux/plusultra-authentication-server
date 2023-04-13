@@ -19,7 +19,6 @@ model User {
   telephone   String?
   avatar      String?
   userShopId  Int?    @unique
-  accessToken String?  @unique
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
