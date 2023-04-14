@@ -15,8 +15,8 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @EventPattern('create_user')
-  createUser(dto: AuthDto) {
+  @MessagePattern('create_user')
+  createUser(@Payload() dto: AuthDto) {
     return this.authService.createUser(dto);
   }
 

@@ -17,6 +17,10 @@ import { Redis } from 'ioredis';
 import { ServerErrorException } from './exceptions';
 
 const EXPIRESIN: number = 7 * 24 * 60 * 60;
+export interface IAuthResponse {
+  access_token: string;
+  refresh_token: string;
+}
 
 @Injectable()
 export class AuthService {
@@ -27,7 +31,7 @@ export class AuthService {
     @Inject(IORedisKey) private readonly redisClient: Redis,
   ) {}
 
-  async createUser(dto: AuthDto) {
+  async createUser(dto: AuthDto): Promise<IAuthResponse> {
     const hash = await argon.hash(dto.password);
     try {
       const user = await this.prisma.user.create({
@@ -54,7 +58,7 @@ export class AuthService {
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
         if (error.code == 'P2002') {
-          throw new ForbiddenException('Credientials taken');
+          throw new ForbiddenException('existed email');
         }
       }
       throw error;
@@ -92,7 +96,7 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshTokenDto) {
-    const existedToken = await this._getRefreshTokenToRedis(
+    const existedToken = await this._getRefreshTokenFromRedis(
       dto.userId.toString(),
     );
     if (!existedToken) throw new ServerErrorException();
@@ -120,15 +124,8 @@ export class AuthService {
   async signout(dto: SignOutDto) {
     try {
       await Promise.all([
-        // this.prisma.user.update({
-        //   where: {
-        //     id: dto.userId,
-        //   },
-        //   data: {
-        //     accessToken: null,
-        //   },
-        // }),
-        this.redisClient.del(`uid:${dto.userId}`),
+        this._delAccessToken(dto.userId.toString()),
+        this._delRefreshToken(dto.userId.toString()),
       ]);
       return {
         message: 'OK',
@@ -215,13 +212,23 @@ export class AuthService {
     );
   }
 
-  async _getRefreshTokenToRedis(userId: string) {
-    Logger.log(`- SET key 'uidr:${userId}' to REDIS`);
+  async _getRefreshTokenFromRedis(userId: string) {
+    Logger.log(`- GET key 'uidr:${userId}' from REDIS`);
     return this.redisClient.get(`uidr:${userId}`);
   }
 
-  async _getAccessTokenToRedis(userId: string) {
-    Logger.log(`- SET key 'uida:${userId}' to REDIS`);
+  async _getAccessTokenFromRedis(userId: string) {
+    Logger.log(`- GET key 'uida:${userId}' from REDIS`);
     return this.redisClient.get(`uida:${userId}`);
+  }
+
+  async _delRefreshToken(userId: string) {
+    Logger.log(`- DELETE key 'uidr:${userId}' from to REDIS`);
+    return this.redisClient.del(`uidr:${userId}`);
+  }
+
+  async _delAccessToken(userId: string) {
+    Logger.log(`- DELETE key 'uida:${userId}' from to REDIS`);
+    return this.redisClient.del(`uida:${userId}`);
   }
 }
