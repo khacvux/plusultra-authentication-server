@@ -12,6 +12,7 @@ datasource db {
 
 model User {
   id         Int     @id @default(autoincrement())
+  roleId     Int
   hash       String
   firstName  String?
   lastName   String?
@@ -23,16 +24,27 @@ model User {
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  userAddress     UserAddress[]    @relation("user_address_fk")
-  userPayment     UserPayment[]    @relation("user_payment_fk")
-  shoppingSession ShoppingSession? @relation("shopping_session_fk")
-  orderDetail     OrderDetail?     @relation("order_detail_fk")
-  userShop        UserShop?        @relation("user_to_user_shop_fk")
-  post            Post[]           @relation("user_post_fk")
-  postLikes       PostLike[]       @relation("user_likepost")
-  postComments    PostComment[]    @relation("user_commentpost")
+  role             UserRole          @relation("user_role_fk", fields: [roleId], references: [id])
+  userAddress      UserAddress[]     @relation("user_address_fk")
+  userPayment      UserPayment[]     @relation("user_payment_fk")
+  shoppingSession  ShoppingSession?  @relation("shopping_session_fk")
+  orderDetail      OrderDetail?      @relation("order_detail_fk")
+  products         Product[]         @relation("users_product_fk")
+  post             Post[]            @relation("user_post_fk")
+  postLikes        PostLike[]        @relation("user_likepost")
+  postComments     PostComment[]     @relation("user_commentpost")
+  postCommentLikes PostCommentLike[] @relation("user_like_comment")
 
   @@map("user")
+}
+
+model UserRole {
+  id   Int    @id
+  role String
+
+  user User[] @relation("user_role_fk")
+
+  @@map("user_role")
 }
 
 model UserAddress {
@@ -71,6 +83,8 @@ model ShoppingSession {
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
+
+  @@map("shopping_session")
 }
 
 model CartItem {
@@ -94,62 +108,95 @@ model Product {
   name        String
   desc        String
   price       Decimal @db.Money
-  categoryId  Int     @unique
-  inventoryId Int     @unique
-  discountId  Int     @unique
+  moneyTypeId Int
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
   deletedAt  DateTime @updatedAt
 
-  cartItem         CartItem?         @relation("product_fk")
-  productCategory  ProductCategory[] @relation("product_category_fk")
-  productInventory ProductInventory? @relation("product_inventory_fk")
-  productDiscount  ProductDiscount[] @relation("product_discount_fk")
-  orderItem        OrderItem?        @relation("order_item_fk")
-  userShop         UserShop          @relation("user_shop_fk", fields: [id], references: [productId])
+  user       User              @relation("users_product_fk", fields: [sellerId], references: [id])
+  moneyType  MoneyType         @relation("product_money_type", fields: [moneyTypeId], references: [moneyTypeId])
+  cartItem   CartItem?         @relation("product_fk")
+  categories ProductCategory[] @relation("product_category_fk")
+  inventory  ProductInventory? @relation("product_inventory_fk")
+  discount   ProductDiscount[] @relation("product_discount_fk")
+  orderItem  OrderItem?        @relation("order_item_fk")
+  images     ProductImage[]    @relation("products_image")
 
   @@map("product")
 }
 
+model ProductImage {
+  id        String @id
+  productId Int
+  url       String
+
+  product Product @relation("products_image", fields: [productId], references: [id])
+
+  @@map("product_image")
+}
+
 model ProductCategory {
+  categoryId Int
+  productId  Int
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  product  Product    @relation("product_category_fk", fields: [productId], references: [id])
+  category Categories @relation("category_product_fk", fields: [categoryId], references: [id])
+
+  @@id([categoryId, productId])
+  @@map("product_category")
+}
+
+model Categories {
   id   Int     @id @default(autoincrement())
   name String
   desc String?
 
-  createdAt  DateTime @default(now())
-  modifiedAt DateTime @updatedAt
-  deletedAt  DateTime @updatedAt
+  productCategory ProductCategory[] @relation("category_product_fk")
 
-  product Product @relation("product_category_fk", fields: [id], references: [categoryId])
+  @@map("categories")
+}
 
-  @@map("product_category")
+model MoneyType {
+  moneyTypeId Int    @id
+  type        String
+
+  product Product[] @relation("product_money_type")
+
+  @@map("money_type")
 }
 
 model ProductInventory {
-  id       Int @id @default(autoincrement())
-  quantity Int
+  productId Int @id
+  quantity  Int
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
   deletedAt  DateTime @updatedAt
 
-  product Product @relation("product_inventory_fk", fields: [id], references: [inventoryId])
+  product Product @relation("product_inventory_fk", fields: [productId], references: [id])
 
   @@map("product_inventory")
 }
 
 model ProductDiscount {
-  id           Int     @id @default(autoincrement())
-  name         String
-  desc         String
-  desc_percent String
-  active       Boolean
+  id               Int     @id @default(autoincrement())
+  productId        Int
+  name             String?
+  desc             String?
+  discount_percent Decimal
+
+
+  startDate DateTime
+  endDate   DateTime
 
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  product Product @relation("product_discount_fk", fields: [id], references: [discountId])
+  product Product @relation("product_discount_fk", fields: [productId], references: [id])
 
   @@map("product_discount")
 }
@@ -202,19 +249,6 @@ model PaymentDetail {
   @@map("payment_detail")
 }
 
-model UserShop {
-  id        Int @id() @default(autoincrement())
-  productId Int @unique
-
-  createdAt  DateTime @default(now())
-  modifiedAt DateTime @updatedAt
-
-  product Product[] @relation("user_shop_fk")
-  user    User      @relation("user_to_user_shop_fk", fields: [id], references: [userShopId])
-
-  @@map("user_shop")
-}
-
 model Post {
   id       Int     @id @default(autoincrement())
   caption  String?
@@ -242,8 +276,10 @@ model PostLike {
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  post Post @relation("like_post", fields: [postId], references: [id])
-  user User @relation("user_likepost", fields: [userId], references: [id])
+  post   Post @relation("like_post", fields: [postId], references: [id])
+  author User @relation("user_likepost", fields: [userId], references: [id])
+
+  @@map("post_like")
 }
 
 model PostMedia {
@@ -268,10 +304,25 @@ model PostComment {
   createdAt  DateTime @default(now())
   modifiedAt DateTime @updatedAt
 
-  post Post @relation("comment_post", fields: [postId], references: [id])
-  user User @relation("user_commentpost", fields: [authorId], references: [id])
+  post   Post              @relation("comment_post", fields: [postId], references: [id])
+  author User              @relation("user_commentpost", fields: [authorId], references: [id])
+  likes  PostCommentLike[] @relation("comment_user_liked")
 
   @@map("post_comment")
+}
+
+model PostCommentLike {
+  commentId Int
+  userId    Int
+
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  user    User         @relation("user_like_comment", fields: [userId], references: [id])
+  comment PostComment? @relation("comment_user_liked", fields: [commentId], references: [id])
+
+  @@id([commentId, userId])
+  @@map("post_comment_likes")
 }
 
 model PostShare {

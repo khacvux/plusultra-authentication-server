@@ -37,14 +37,15 @@ export class AuthService {
       const user = await this.prisma.user.create({
         data: {
           email: dto.email,
+          roleId: 2,
           firstName: dto?.firstname,
           lastName: dto?.lastname,
           hash,
         },
       });
       const [access_token, refresh_token] = await Promise.all([
-        this._signAccessToken(user.id),
-        this._signRefreshToken(user.id),
+        this._signAccessToken(user.id, user.roleId),
+        this._signRefreshToken(user.id, user.roleId),
       ]);
       await Promise.all([
         this._setAccessTokenToRedis(user.id.toString(), access_token),
@@ -77,8 +78,8 @@ export class AuthService {
     if (!pwMatches) throw new ForbiddenException('Credientials incorrect');
 
     const [access_token, refresh_token] = await Promise.all([
-      this._signAccessToken(user.id),
-      this._signRefreshToken(user.id),
+      this._signAccessToken(user.id, user.roleId),
+      this._signRefreshToken(user.id, user.roleId),
     ]);
     try {
       await Promise.all([
@@ -96,6 +97,7 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshTokenDto) {
+    const decoded: any = this.jwt.decode(dto.refreshToken);
     const existedToken = await this._getRefreshTokenFromRedis(
       dto.userId.toString(),
     );
@@ -104,8 +106,8 @@ export class AuthService {
     if (tokenMatches) throw new ForbiddenException('Credientials incorrect');
     try {
       const [access_token, refresh_token] = await Promise.all([
-        this._signAccessToken(dto.userId),
-        this._signRefreshToken(dto.userId),
+        this._signAccessToken(dto.userId, decoded.roleId),
+        this._signRefreshToken(dto.userId, decoded.roleId),
       ]);
       Logger.log(`ACCOUNT "${dto.userId}" SIGNED IN.`);
       await Promise.all([
@@ -170,9 +172,10 @@ export class AuthService {
     return result.authorId == payload.authorId;
   }
 
-  async _signAccessToken(userId: number): Promise<string> {
+  async _signAccessToken(userId: number, roleId: number): Promise<string> {
     const payload = {
       sub: userId,
+      roleId,
     };
     const token = await this.jwt.signAsync(payload, {
       expiresIn: this.config.get('EXPIRESIN'),
@@ -181,9 +184,10 @@ export class AuthService {
     return token;
   }
 
-  async _signRefreshToken(userId: number): Promise<string> {
+  async _signRefreshToken(userId: number, roleId: number): Promise<string> {
     const payload = {
       sub: userId,
+      roleId,
     };
     const refresh_token = await this.jwt.signAsync(payload, {
       expiresIn: this.config.get('EXPIRESIN_REFRESH'),

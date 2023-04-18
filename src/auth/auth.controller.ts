@@ -1,7 +1,6 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import { GetUser } from './decorator';
 import {
   IsTokenDto,
   IsUserIdDto,
